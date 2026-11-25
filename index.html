@@ -1,0 +1,853 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Galaxy Shooter - Cute Space Adventure</title>
+
+<style>
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    min-height: 100vh;
+    background: linear-gradient(135deg, #ffe0f0, #e7dcff, #d9f4ff);
+    font-family: Arial, sans-serif;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    padding: 15px;
+    color: #76548d;
+}
+
+.container {
+    width: 100%;
+    max-width: 800px;
+    padding: 22px;
+    text-align: center;
+    background: #fffaff;
+    border: 4px solid white;
+    border-radius: 25px;
+    box-shadow: 0 8px 30px #b994d855;
+}
+
+h1 {
+    color: #b46bce;
+    font-size: 30px;
+    margin-bottom: 8px;
+    text-shadow: 0 2px 8px #eac9ff;
+}
+
+.subtitle {
+    color: #9b82b6;
+    margin-bottom: 18px;
+}
+
+.stats {
+    display: flex;
+    gap: 10px;
+    justify-content: space-around;
+    margin-bottom: 15px;
+}
+
+.stat {
+    flex: 1;
+    background: #f5eaff;
+    border: 2px solid #ead5ff;
+    border-radius: 13px;
+    padding: 10px;
+    font-size: 13px;
+    font-weight: bold;
+}
+
+.stat span {
+    display: block;
+    color: #b46bce;
+    font-size: 22px;
+    margin-top: 5px;
+}
+
+#gameCanvas {
+    display: block;
+    width: 100%;
+    background: #201b46;
+    border: 3px solid #d4b5fa;
+    border-radius: 17px;
+    touch-action: none;
+    box-shadow: 0 0 20px #d7b5ff88;
+}
+
+.controls {
+    margin-top: 15px;
+}
+
+button {
+    border: none;
+    border-radius: 12px;
+    padding: 12px 20px;
+    margin: 5px;
+    background: #c68be3;
+    color: white;
+    font-weight: bold;
+    font-size: 15px;
+    cursor: pointer;
+    box-shadow: 0 4px 10px #c68be355;
+}
+
+button:hover {
+    background: #a66bc8;
+    transform: translateY(-2px);
+}
+
+.instructions {
+    margin-top: 15px;
+    font-size: 13px;
+    line-height: 1.8;
+    color: #997ba9;
+}
+
+@media(max-width: 450px) {
+    .container {
+        padding: 12px;
+    }
+
+    h1 {
+        font-size: 23px;
+    }
+
+    .stat {
+        padding: 7px 3px;
+        font-size: 11px;
+    }
+
+    .stat span {
+        font-size: 18px;
+    }
+}
+</style>
+</head>
+
+<body>
+
+<div class="container">
+
+    <h1>🌸 GALAXY SHOOTER 🚀</h1>
+
+    <p class="subtitle">
+        Welcome to your cute little space adventure!
+    </p>
+
+    <div class="stats">
+
+        <div class="stat">
+            ⭐ SCORE
+            <span id="score">0</span>
+        </div>
+
+        <div class="stat">
+            ❤️ LIVES
+            <span id="lives">❤️❤️❤️</span>
+        </div>
+
+        <div class="stat">
+            🏆 BEST
+            <span id="best">0</span>
+        </div>
+
+    </div>
+
+    <canvas id="gameCanvas"
+            width="800"
+            height="520">
+    </canvas>
+
+    <div class="controls">
+
+        <button onclick="startGame()">
+            🚀 START / RESTART
+        </button>
+
+        <button onclick="togglePause()" id="pauseButton">
+            ⏸ PAUSE
+        </button>
+
+        <button onclick="toggleSound()" id="soundButton">
+            🔊 SOUND ON
+        </button>
+
+    </div>
+
+    <p class="instructions">
+        ⬅️ ➡️ Use arrow keys or A and D to move.<br>
+        SPACEBAR to shoot enemies.<br>
+        📱 On mobile, drag your spaceship and tap to shoot.<br>
+        💗 Avoid the aliens and protect your spaceship!
+    </p>
+
+</div>
+
+<script>
+
+// Get canvas and elements
+const canvas = document.getElementById("gameCanvas");
+const ctx = canvas.getContext("2d");
+
+const scoreText = document.getElementById("score");
+const livesText = document.getElementById("lives");
+const bestText = document.getElementById("best");
+
+const pauseButton = document.getElementById("pauseButton");
+const soundButton = document.getElementById("soundButton");
+
+// Game variables
+let score = 0;
+let lives = 3;
+
+let best = Number(localStorage.getItem("galaxyBest")) || 0;
+
+let gameState = "ready";
+let animationId = null;
+
+let enemies = [];
+let bullets = [];
+let stars = [];
+
+let frame = 0;
+let spawnTimer = 0;
+let shootTimer = 0;
+let keys = {};
+
+let soundOn = true;
+let audioContext;
+
+bestText.textContent = best;
+
+// Player spaceship
+const player = {
+    x: 400,
+    y: 460,
+    width: 48,
+    height: 48,
+    speed: 7,
+    invincible: 0
+};
+
+// Background stars
+function createStars() {
+
+    stars = [];
+
+    for (let i = 0; i < 90; i++) {
+
+        stars.push({
+            x: Math.random() * canvas.width,
+            y: Math.random() * canvas.height,
+            size: Math.random() * 2 + 1,
+            speed: Math.random() * 1.5 + 0.4
+        });
+
+    }
+
+}
+
+// Draw galaxy background
+function drawBackground() {
+
+    const gradient = ctx.createLinearGradient(
+        0, 0, 0, canvas.height
+    );
+
+    gradient.addColorStop(0, "#26204e");
+    gradient.addColorStop(0.5, "#41336e");
+    gradient.addColorStop(1, "#201b46");
+
+    ctx.fillStyle = gradient;
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+    stars.forEach(star => {
+
+        ctx.fillStyle = "#ffffff";
+        ctx.globalAlpha = 0.4 + Math.random() * 0.6;
+
+        ctx.beginPath();
+
+        ctx.arc(
+            star.x,
+            star.y,
+            star.size,
+            0,
+            Math.PI * 2
+        );
+
+        ctx.fill();
+
+        ctx.globalAlpha = 1;
+
+        if (gameState === "running") {
+            star.y += star.speed;
+        }
+
+        if (star.y > canvas.height) {
+            star.y = 0;
+            star.x = Math.random() * canvas.width;
+        }
+
+    });
+
+}
+
+// Sound effects
+function playSound(frequency, duration) {
+
+    if (!soundOn) return;
+
+    try {
+
+        audioContext = audioContext ||
+            new (window.AudioContext || window.webkitAudioContext)();
+
+        if (audioContext.state === "suspended") {
+            audioContext.resume();
+        }
+
+        const oscillator = audioContext.createOscillator();
+        const gain = audioContext.createGain();
+
+        oscillator.connect(gain);
+        gain.connect(audioContext.destination);
+
+        oscillator.type = "sine";
+        oscillator.frequency.value = frequency;
+
+        gain.gain.setValueAtTime(
+            0.06,
+            audioContext.currentTime
+        );
+
+        gain.gain.exponentialRampToValueAtTime(
+            0.001,
+            audioContext.currentTime + duration
+        );
+
+        oscillator.start();
+
+        oscillator.stop(
+            audioContext.currentTime + duration
+        );
+
+    } catch (error) {
+        console.log("Sound unavailable");
+    }
+
+}
+
+function toggleSound() {
+
+    soundOn = !soundOn;
+
+    soundButton.textContent =
+        soundOn ? "🔊 SOUND ON" : "🔇 SOUND OFF";
+
+}
+
+// Draw spaceship
+function drawPlayer() {
+
+    ctx.save();
+
+    if (player.invincible > 0 &&
+        Math.floor(player.invincible / 6) % 2 === 0) {
+        ctx.globalAlpha = 0.35;
+    }
+
+    ctx.font = "45px Arial";
+    ctx.textAlign = "center";
+
+    ctx.shadowColor = "#ff9de2";
+    ctx.shadowBlur = 20;
+
+    ctx.fillText(
+        "🚀",
+        player.x,
+        player.y + 16
+    );
+
+    ctx.restore();
+
+}
+
+// Create bullets
+function shoot() {
+
+    bullets.push({
+        x: player.x,
+        y: player.y - 25,
+        speed: 9,
+        size: 5
+    });
+
+    playSound(650, 0.08);
+
+}
+
+// Draw bullets
+function drawBullets() {
+
+    bullets.forEach(bullet => {
+
+        ctx.save();
+
+        ctx.shadowColor = "#ffb4ec";
+        ctx.shadowBlur = 15;
+
+        ctx.fillStyle = "#ffb4ec";
+
+        ctx.beginPath();
+
+        ctx.arc(
+            bullet.x,
+            bullet.y,
+            bullet.size,
+            0,
+            Math.PI * 2
+        );
+
+        ctx.fill();
+
+        ctx.restore();
+
+    });
+
+}
+
+// Create alien enemies
+function createEnemy() {
+
+    const alienTypes = ["👾", "👽", "🛸", "💜"];
+
+    enemies.push({
+
+        x: 30 + Math.random() * (canvas.width - 60),
+
+        y: -35,
+
+        speed: 1.5 + Math.random() * 1.5 +
+               Math.min(score / 250, 3),
+
+        type: alienTypes[
+            Math.floor(Math.random() * alienTypes.length)
+        ],
+
+        size: 38
+
+    });
+
+}
+
+// Draw enemies
+function drawEnemies() {
+
+    enemies.forEach(enemy => {
+
+        ctx.save();
+
+        ctx.shadowColor = "#e9a6ff";
+        ctx.shadowBlur = 15;
+
+        ctx.font = "35px Arial";
+        ctx.textAlign = "center";
+
+        ctx.fillText(
+            enemy.type,
+            enemy.x,
+            enemy.y
+        );
+
+        ctx.restore();
+
+    });
+
+}
+
+// Collision detection
+function checkCollision(a, b) {
+
+    return (
+        Math.abs(a.x - b.x) <
+        (a.width + b.width) / 2 &&
+        Math.abs(a.y - b.y) <
+        (a.height + b.height) / 2
+    );
+
+}
+
+// Update game
+function updateGame() {
+
+    frame++;
+
+    // Player movement
+    if (keys["ArrowLeft"] || keys["a"] || keys["A"]) {
+        player.x -= player.speed;
+    }
+
+    if (keys["ArrowRight"] || keys["d"] || keys["D"]) {
+        player.x += player.speed;
+    }
+
+    player.x = Math.max(
+        25,
+        Math.min(canvas.width - 25, player.x)
+    );
+
+    // Shooting
+    shootTimer++;
+
+    if (
+        (keys[" "] || keys["Spacebar"]) &&
+        shootTimer > 12
+    ) {
+
+        shoot();
+        shootTimer = 0;
+
+    }
+
+    // Spawn enemies
+    spawnTimer++;
+
+    if (spawnTimer > Math.max(22, 65 - score / 10)) {
+
+        createEnemy();
+        spawnTimer = 0;
+
+    }
+
+    // Move bullets
+    bullets.forEach(bullet => {
+        bullet.y -= bullet.speed;
+    });
+
+    bullets = bullets.filter(
+        bullet => bullet.y > -10
+    );
+
+    // Move enemies
+    enemies.forEach(enemy => {
+        enemy.y += enemy.speed;
+    });
+
+    // Bullet and enemy collision
+    for (let i = enemies.length - 1; i >= 0; i--) {
+
+        const enemy = enemies[i];
+
+        const bulletIndex = bullets.findIndex(bullet =>
+            Math.abs(bullet.x - enemy.x) < 28 &&
+            Math.abs(bullet.y - enemy.y) < 28
+        );
+
+        if (bulletIndex !== -1) {
+
+            enemies.splice(i, 1);
+            bullets.splice(bulletIndex, 1);
+
+            score += 10;
+
+            scoreText.textContent = score;
+
+            playSound(850, 0.12);
+
+            continue;
+
+        }
+
+        // Alien hits spaceship
+        if (
+            player.invincible <= 0 &&
+            Math.abs(enemy.x - player.x) < 35 &&
+            Math.abs(enemy.y - player.y) < 35
+        ) {
+
+            enemies.splice(i, 1);
+
+            lives--;
+
+            livesText.textContent =
+                "❤️".repeat(lives);
+
+            player.invincible = 80;
+
+            playSound(180, 0.25);
+
+            if (lives <= 0) {
+                endGame();
+                return;
+            }
+
+            continue;
+
+        }
+
+        // Enemy escapes
+        if (enemy.y > canvas.height + 30) {
+
+            enemies.splice(i, 1);
+
+            lives--;
+
+            livesText.textContent =
+                "❤️".repeat(lives);
+
+            if (lives <= 0) {
+                endGame();
+                return;
+            }
+
+        }
+
+    }
+
+    if (player.invincible > 0) {
+        player.invincible--;
+    }
+
+}
+
+// Draw complete game
+function drawGame() {
+
+    drawBackground();
+    drawBullets();
+    drawEnemies();
+    drawPlayer();
+
+}
+
+// Game loop
+function gameLoop() {
+
+    if (gameState !== "running") return;
+
+    updateGame();
+
+    if (gameState !== "running") return;
+
+    drawGame();
+
+    animationId = requestAnimationFrame(gameLoop);
+
+}
+
+// Start game
+function startGame() {
+
+    cancelAnimationFrame(animationId);
+
+    score = 0;
+    lives = 3;
+
+    enemies = [];
+    bullets = [];
+
+    frame = 0;
+    spawnTimer = 0;
+    shootTimer = 0;
+
+    player.x = canvas.width / 2;
+    player.invincible = 0;
+
+    keys = {};
+
+    scoreText.textContent = 0;
+    livesText.textContent = "❤️❤️❤️";
+
+    createStars();
+
+    gameState = "running";
+
+    pauseButton.textContent = "⏸ PAUSE";
+
+    gameLoop();
+
+}
+
+// Pause and resume
+function togglePause() {
+
+    if (gameState === "running") {
+
+        gameState = "paused";
+
+        cancelAnimationFrame(animationId);
+
+        drawGame();
+
+        drawMessage(
+            "GAME PAUSED",
+            "Press RESUME to continue!"
+        );
+
+        pauseButton.textContent = "▶ RESUME";
+
+    } else if (gameState === "paused") {
+
+        gameState = "running";
+
+        pauseButton.textContent = "⏸ PAUSE";
+
+        gameLoop();
+
+    }
+
+}
+
+// End game
+function endGame() {
+
+    gameState = "over";
+
+    cancelAnimationFrame(animationId);
+
+    if (score > best) {
+
+        best = score;
+
+        localStorage.setItem("galaxyBest", best);
+
+        bestText.textContent = best;
+
+    }
+
+    drawGame();
+
+    drawMessage(
+        "GAME OVER!",
+        "Final Score: " + score
+    );
+
+    playSound(200, 0.4);
+
+}
+
+// Display messages
+function drawMessage(title, subtitle) {
+
+    ctx.save();
+
+    ctx.fillStyle = "rgba(30, 20, 65, 0.82)";
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+    ctx.textAlign = "center";
+
+    ctx.fillStyle = "#ffc4ed";
+    ctx.shadowColor = "#ff9de2";
+    ctx.shadowBlur = 18;
+
+    ctx.font = "bold 42px Arial";
+
+    ctx.fillText(
+        title,
+        canvas.width / 2,
+        235
+    );
+
+    ctx.shadowBlur = 0;
+
+    ctx.fillStyle = "white";
+    ctx.font = "20px Arial";
+
+    ctx.fillText(
+        subtitle,
+        canvas.width / 2,
+        280
+    );
+
+    ctx.restore();
+
+}
+
+// Keyboard controls
+document.addEventListener("keydown", function(event) {
+
+    if (
+        event.code === "Space" ||
+        event.key === "ArrowLeft" ||
+        event.key === "ArrowRight"
+    ) {
+        event.preventDefault();
+    }
+
+    keys[event.key] = true;
+    keys[event.code] = true;
+
+});
+
+document.addEventListener("keyup", function(event) {
+
+    keys[event.key] = false;
+    keys[event.code] = false;
+
+});
+
+// Mobile and mouse controls
+function movePlayer(event) {
+
+    const rect = canvas.getBoundingClientRect();
+
+    const scale = canvas.width / rect.width;
+
+    player.x =
+        (event.clientX - rect.left) * scale;
+
+    player.x = Math.max(
+        25,
+        Math.min(canvas.width - 25, player.x)
+    );
+
+}
+
+canvas.addEventListener("pointermove", function(event) {
+
+    if (
+        event.pointerType === "touch" ||
+        event.buttons === 1
+    ) {
+
+        movePlayer(event);
+
+    }
+
+});
+
+canvas.addEventListener("pointerdown", function(event) {
+
+    movePlayer(event);
+
+    if (gameState === "running") {
+        shootTimer = 12;
+        shoot();
+    }
+
+});
+
+// Initial screen
+createStars();
+
+drawBackground();
+
+drawPlayer();
+
+drawMessage(
+    "GALAXY SHOOTER",
+    "Press START to begin your adventure!"
+);
+
+</script>
+
+</body>
+</html>
